@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "404765038398",
+    "project_id": "pokeexplore-1e32b",
+    "storage_bucket": "pokeexplore-1e32b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:404765038398:android:9e21b37668698baffdfe6f",
+        "android_client_info": {
+          "package_name": "com.pokeexplore"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_53Hupc_iBqK_XUo-pbGmPEMdR0NOQ34"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
