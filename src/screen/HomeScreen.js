@@ -1,15 +1,261 @@
-// src/screens/HomeScreen.js
-import React from "react";
-import { View, Text, Button } from "react-native";
+import React, { useState, useEffect } from 'react';
+import { 
+  View, Text, FlatList, Image, TouchableOpacity, 
+  TextInput, StyleSheet, ActivityIndicator, StatusBar, Platform
+} from 'react-native';
+import { fetchPokemonList } from '../api/pokeapi';
 
 export default function HomeScreen({ navigation }) {
+  const [pokemon, setPokemon] = useState([]);
+  const [filteredPokemon, setFilteredPokemon] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    const data = await fetchPokemonList(151); // Gen 1
+    setPokemon(data);
+    setFilteredPokemon(data);
+    setLoading(false);
+  };
+
+  const handleSearch = (text) => {
+    setSearch(text);
+    if (text) {
+      const newData = pokemon.filter(item => {
+        const itemData = item.name ? item.name.toUpperCase() : ''.toUpperCase();
+        const textData = text.toUpperCase();
+        return itemData.indexOf(textData) > -1 || String(item.id) === text;
+      });
+      setFilteredPokemon(newData);
+    } else {
+      setFilteredPokemon(pokemon);
+    }
+  };
+
+  const renderCard = ({ item }) => (
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => navigation.navigate('Detail', { pokemonId: item.id })}
+    >
+      <Image source={{ uri: item.image }} style={styles.cardImage} />
+      <Text style={styles.cardId}>#{String(item.id).padStart(3, '0')}</Text>
+      <Text style={styles.cardName}>{item.name.toUpperCase()}</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>Home Screen</Text>
-      <Button
-        title="Go to Profile"
-        onPress={() => navigation.navigate("Profile")}
-      />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#DC0A2D" />
+
+      {/* 1. HEADER */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>POKÉDEX</Text>
+        <TouchableOpacity
+          style={styles.profileButton}
+          onPress={() => navigation.navigate('Profile')}
+        >
+          <View style={styles.blueLight} />
+        </TouchableOpacity>
+      </View>
+
+      {/* 2. SEARCH BAR */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search Name or ID..."
+          placeholderTextColor="#666"
+          value={search}
+          onChangeText={handleSearch}
+        />
+      </View>
+
+      {/* 3. MAIN POKEMON LIST */}
+      <View style={styles.listWrapper}>
+        {loading ? (
+          <ActivityIndicator size="large" color="#DC0A2D" style={{marginTop: 50}} />
+        ) : (
+          <FlatList
+            data={filteredPokemon}
+            keyExtractor={item => item.name}
+            renderItem={renderCard}
+            numColumns={2}
+            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+      </View>
+
+      {/* 4. NEW BOTTOM NAVIGATION BAR (From Wireframe) */}
+      <View style={styles.bottomNav}>
+
+        {/* Tab 1: Hunt */}
+        <TouchableOpacity style={styles.navItem}>
+          <Text style={styles.navIcon}>📍</Text>
+          <Text style={styles.navText}>Hunt</Text>
+        </TouchableOpacity>
+
+        {/* Tab 2: Pokedex (Active) */}
+        <TouchableOpacity style={styles.navItem}>
+          <View style={styles.activeTabIndicator} />
+          <Text style={styles.navIcon}>📱</Text>
+          <Text style={[styles.navText, styles.activeNavText]}>Pokedex</Text>
+        </TouchableOpacity>
+
+        {/* Tab 3: AR */}
+        <TouchableOpacity style={styles.navItem}>
+          <Text style={styles.navIcon}>👓</Text>
+          <Text style={styles.navText}>AR</Text>
+        </TouchableOpacity>
+
+        {/* Tab 4: Feed */}
+        <TouchableOpacity style={styles.navItem}>
+          <Text style={styles.navIcon}>🌐</Text>
+          <Text style={styles.navText}>Feed</Text>
+        </TouchableOpacity>
+
+        {/* Tab 5: Profile */}
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => navigation.navigate('Profile')}
+        >
+          <Text style={styles.navIcon}>👤</Text>
+          <Text style={styles.navText}>Profile</Text>
+        </TouchableOpacity>
+
+      </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#DC0A2D',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+  headerTitle: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  profileButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  blueLight: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#28AAFD',
+    borderWidth: 2,
+    borderColor: '#FFF',
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  searchInput: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    height: 40,
+    borderWidth: 2,
+    borderColor: '#333',
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  // Wrapper allows the list to take up space above the navbar
+  listWrapper: {
+    flex: 1,
+    backgroundColor: '#333',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    overflow: 'hidden', // Ensures content stays inside rounded corners
+  },
+  listContent: {
+    padding: 10,
+    paddingBottom: 20,
+  },
+  row: {
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  card: {
+    backgroundColor: '#FFF',
+    width: '48%',
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+    elevation: 3,
+  },
+  cardImage: {
+    width: 80,
+    height: 80,
+  },
+  cardId: {
+    color: '#666',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+  cardName: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+
+  // --- BOTTOM NAVBAR STYLES ---
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#222', // Dark background like wireframe
+    paddingVertical: 10,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10, // Safe area for iOS
+    borderTopWidth: 1,
+    borderTopColor: '#444',
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 50,
+  },
+  navIcon: {
+    fontSize: 20,
+    marginBottom: 4,
+    color: '#888',
+  },
+  navText: {
+    color: '#888',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  // Active State Styles
+  activeTabIndicator: {
+    position: 'absolute',
+    top: -10,
+    width: 40,
+    height: 3,
+    backgroundColor: '#28AAFD', // Active Blue Line
+  },
+  activeNavText: {
+    color: '#FFF',
+  },
+});

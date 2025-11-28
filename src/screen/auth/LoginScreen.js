@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  Alert
+  Alert,
+  Keyboard // Import Keyboard to dismiss it
 } from 'react-native';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../firebase/firebase';
@@ -19,35 +20,45 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     setError(null);
+    Keyboard.dismiss(); // Hide keyboard on press
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log("User logged in successfully:", userCredential.user.uid);
     } catch (e) {
-      // FIX: Changed console.error to console.log to prevent the black popup bar
       console.log("Login failed:", e.message);
       setError("Invalid Trainer ID or Password");
     }
   };
 
   const handleForgotPassword = async () => {
+    setError(null);
+    Keyboard.dismiss(); // Hide keyboard so user sees the Alert
+
     if (!email) {
-      setError("Please enter your email address above first.");
+      setError("Please enter your EMAIL address in the box above first.");
       return;
     }
+
     try {
       await sendPasswordResetEmail(auth, email);
-      Alert.alert("Transmission Sent", "Check your inbox for a password reset link!");
-      setError(null);
+      Alert.alert("Transmission Sent", "Check your email inbox for a password reset link!");
     } catch (e) {
-      // FIX: Changed console.error to console.log here too
-      console.log("Reset failed:", e.message);
-      setError("Could not send reset link. Check email.");
+      console.log("Reset failed:", e.code);
+
+      // Better Error Handling
+      if (e.code === 'auth/user-not-found') {
+        setError("No Trainer account found with this email.");
+      } else if (e.code === 'auth/invalid-email') {
+        setError("That is not a valid email address.");
+      } else {
+        setError("Could not send reset link. Try again later.");
+      }
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Pokedex Top Header with Lights */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.blueLightContainer}>
           <View style={styles.blueLight} />
@@ -62,7 +73,7 @@ export default function LoginScreen({ navigation }) {
 
       <Text style={styles.headerTitle}>POKÉ-EXPLORE</Text>
 
-      {/* The "Screen" Area */}
+      {/* Screen */}
       <View style={styles.screenContainer}>
         <View style={styles.innerScreen}>
           <Text style={styles.screenTitle}>TRAINER LOGIN</Text>
@@ -105,7 +116,7 @@ export default function LoginScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Control Pad Area */}
+      {/* Controls */}
       <View style={styles.controlsContainer}>
         <TouchableOpacity style={styles.primaryButton} onPress={handleLogin}>
           <Text style={styles.primaryButtonText}>LOGIN</Text>
@@ -115,7 +126,6 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.secondaryLink}>NEW TRAINER? REGISTER</Text>
         </TouchableOpacity>
 
-        {/* Decorative D-Pad (Visual only) */}
         <View style={styles.dpadContainer}>
            <View style={styles.dpadVertical} />
            <View style={styles.dpadHorizontal} />
@@ -128,7 +138,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DC0A2D', // Pokedex Red
+    backgroundColor: '#DC0A2D',
     paddingTop: 50,
   },
   header: {
@@ -183,9 +193,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 10,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 5,
   },
   screenContainer: {
     backgroundColor: '#DEDEDE',
@@ -200,10 +207,6 @@ const styles = StyleSheet.create({
     borderColor: '#555',
     borderRadius: 5,
     padding: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
     elevation: 5,
   },
   screenTitle: {
@@ -286,10 +289,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 2,
     borderColor: '#1C5D8D',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.30,
-    shadowRadius: 4.65,
     elevation: 8,
     marginBottom: 20,
   },
@@ -304,9 +303,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
     textDecorationLine: 'underline',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
   },
   dpadContainer: {
     width: 80,
