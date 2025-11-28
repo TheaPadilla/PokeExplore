@@ -1,97 +1,94 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Poké-Explore App 📱⚡
 
-# Getting Started
+**Poké-Explore** is a React Native mobile application designed with a nostalgic "Pokedex" aesthetic. This project demonstrates a complete authentication flow (Login/Signup) and a user profile system using Firebase Authentication with robust persistence handling.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+---
 
-## Step 1: Start Metro
+## 🚀 Key Features
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- **Retro Pokedex UI:** Custom-styled screens imitating the classic red handheld device, complete with "green screen" data displays, sensor lights, and D-pad visuals.
+- **Firebase Authentication:** Fully functional email/password login and registration.
+- **Persistent Session:** Users remain logged in across app restarts using AsyncStorage.
+- **Password Management:** Includes "Show/Hide Password" toggles and a "Forgot Password" reset flow.
+- **Mock Data Integration:** Simulates a list of discovered Pokémon on the profile screen.
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+---
 
-```sh
-# Using npm
-npm start
+## 🛠️ Firebase Integration (Success!)
 
-# OR using Yarn
-yarn start
-```
+This project successfully integrates **Firebase Modular SDK (v9+)**.
 
-## Step 2: Build and run your app
+### Technical Highlights:
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+- **Solved Network Request Failures:** Implemented `initializeAuth` with `@react-native-async-storage/async-storage` to ensure authentication state persists correctly on Android/iOS physical devices and emulators.
+- **Hot-Reload Safety:** Implemented error handling for `auth/already-initialized` to prevent crashes during development hot reloads.
+- **Auth State Listening:** Utilized `onAuthStateChanged` in the main entry file to automatically navigate between Auth and Main stacks based on login status.
 
-### Android
+---
 
-```sh
-# Using npm
-npm run android
+## 📸 Progress & Screens
 
-# OR using Yarn
-yarn android
-```
+### 1. Login Screen
 
-### iOS
+The entry point for Trainers.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+**Features:**
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+- Email & Password input fields styled like retro computer terminals.
+- Toggle Visibility: "SHOW/HIDE" switch for the password field.
+- Forgot Password: Triggers a Firebase password reset email.
+- Navigation to Registration.
 
-```sh
-bundle install
-```
+<img src="assets/images/LoginScreen.jpeg" alt="Login Screen" width="300"/>
 
-Then, and every time you update your native dependencies, run:
+---
 
-```sh
-bundle exec pod install
-```
+### 2. Sign Up Screen
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+Registration for new Trainers.
 
-```sh
-# Using npm
-npm run ios
+**Features:**
 
-# OR using Yarn
-yarn ios
-```
+- Consistent Pokedex aesthetic.
+- Input validation (Firebase handles weak passwords/duplicate emails).
+- Error handling with user-friendly messages (no invasive popups).
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+<img src="assets/images/Signup Screen.jpeg" alt="Signup Screen" width="300"/>
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+---
 
-## Step 3: Modify your app
+### 3. Profile Screen (Trainer Card)
 
-Now that you have successfully run the app, let's make changes!
+The main dashboard after logging in.
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+**Features:**
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+- Immersive Header: Integrated "Back" arrow directly into the red chassis (no white navigation bar).
+- Trainer ID: Displays the logged-in user's email.
+- Recent Discoveries: Uses Mock Data to simulate a list of caught/seen Pokémon with color-coded badges.
+- Log Out: Successfully signs the user out and returns to the Login stack.
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+<img src="assets/images/ProfileScreen.jpeg" alt="Profile Screen" width="300"/>
 
-## Congratulations! :tada:
+---
 
-You've successfully run and modified your React Native App. :partying_face:
+## 💻 Technical Stack
 
-### Now what?
+- **Framework:** React Native
+- **Language:** JavaScript (ES6+)
+- **Backend:** Firebase (Authentication)
+- **Storage:** `@react-native-async-storage/async-storage`
+- **Navigation:** React Navigation (Native Stack)
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+---
 
-# Troubleshooting
+## 📝 Mock Data Structure
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+The profile screen currently uses the following structure to simulate the Pokedex entries:
 
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+```javascript
+const MOCK_DISCOVERIES = [
+  { id: '001', name: 'BULBASAUR', status: 'CAUGHT', type: 'GRASS' },
+  { id: '004', name: 'CHARMANDER', status: 'SEEN', type: 'FIRE' },
+  // ...
+];
