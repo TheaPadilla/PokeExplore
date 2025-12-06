@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  View, Text, FlatList, Image, TouchableOpacity, 
+  View, Text, FlatList, Image, TouchableOpacity,
   TextInput, StyleSheet, ActivityIndicator, StatusBar, Platform
 } from 'react-native';
 import { fetchPokemonList } from '../api/pokeapi';
@@ -90,44 +90,6 @@ export default function HomeScreen({ navigation }) {
         )}
       </View>
 
-      {/* 4. NEW BOTTOM NAVIGATION BAR (From Wireframe) */}
-      <View style={styles.bottomNav}>
-
-        {/* Tab 1: Hunt */}
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>📍</Text>
-          <Text style={styles.navText}>Hunt</Text>
-        </TouchableOpacity>
-
-        {/* Tab 2: Pokedex (Active) */}
-        <TouchableOpacity style={styles.navItem}>
-          <View style={styles.activeTabIndicator} />
-          <Text style={styles.navIcon}>📱</Text>
-          <Text style={[styles.navText, styles.activeNavText]}>Pokedex</Text>
-        </TouchableOpacity>
-
-        {/* Tab 3: AR */}
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>👓</Text>
-          <Text style={styles.navText}>AR</Text>
-        </TouchableOpacity>
-
-        {/* Tab 4: Feed */}
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>🌐</Text>
-          <Text style={styles.navText}>Feed</Text>
-        </TouchableOpacity>
-
-        {/* Tab 5: Profile */}
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.navIcon}>👤</Text>
-          <Text style={styles.navText}>Profile</Text>
-        </TouchableOpacity>
-
-      </View>
     </View>
   );
 }

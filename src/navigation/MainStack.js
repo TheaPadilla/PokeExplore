@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabBarLabel: {
-    fontSize: 0, // Hide default label
+    fontSize: 1, // Hide default label
   },
   tabIconContainer: {
     alignItems: 'center',

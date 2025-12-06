@@ -1,32 +1,46 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Platform,
-  FlatList
+  FlatList,
+  ActivityIndicator
 } from "react-native";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/firebase";
-
-// Mock Data to simulate discovered Pokemon
-const MOCK_DISCOVERIES = [
-  { id: '001', name: 'BULBASAUR', status: 'CAUGHT', type: 'GRASS' },
-  { id: '004', name: 'CHARMANDER', status: 'SEEN', type: 'FIRE' },
-  { id: '007', name: 'SQUIRTLE', status: 'CAUGHT', type: 'WATER' },
-  { id: '025', name: 'PIKACHU', status: 'CAUGHT', type: 'ELEC' },
-  { id: '133', name: 'EEVEE', status: 'SEEN', type: 'NORMAL' },
-];
+import { fetchPokemonList } from "../api/pokeapi"; // Import the API helper
 
 export default function ProfileScreen({ navigation }) {
   const userEmail = auth.currentUser?.email || "Unknown Trainer";
+  const [recentDiscoveries, setRecentDiscoveries] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadRecentDiscoveries();
+  }, []);
+
+  const loadRecentDiscoveries = async () => {
+    // Fetch the full list from our API/Cache
+    const fullList = await fetchPokemonList();
+
+    // Simulate "Recent Discoveries" by taking a random slice or the first few
+    // In a real app, this would come from a database of caught pokemon
+    const recent = fullList.slice(0, 10).map(pokemon => ({
+      ...pokemon,
+      // Randomly assign status for demo purposes since we don't have a catch system yet
+      status: Math.random() > 0.5 ? 'CAUGHT' : 'SEEN'
+    }));
+
+    setRecentDiscoveries(recent);
+    setLoading(false);
+  };
 
   const handleLogout = () => {
     signOut(auth)
       .then(() => {
         console.log("User signed out");
-        // Navigation is handled automatically by App.js state listener
       })
       .catch((error) => {
         console.error("Logout Error:", error);
@@ -34,16 +48,19 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const renderPokemonItem = ({ item }) => (
-    <View style={styles.dexRow}>
-      <Text style={styles.dexId}>#{item.id}</Text>
-      <Text style={styles.dexName}>{item.name}</Text>
+    <TouchableOpacity
+      style={styles.dexRow}
+      onPress={() => navigation.navigate('Detail', { pokemonId: item.id })}
+    >
+      <Text style={styles.dexId}>#{String(item.id).padStart(3, '0')}</Text>
+      <Text style={styles.dexName}>{item.name.toUpperCase()}</Text>
       <View style={[
         styles.statusBadge,
         item.status === 'CAUGHT' ? styles.badgeCaught : styles.badgeSeen
       ]}>
         <Text style={styles.statusText}>{item.status}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -78,13 +95,18 @@ export default function ProfileScreen({ navigation }) {
 
           {/* Pokedex List Section */}
           <Text style={styles.sectionHeader}>RECENT DISCOVERIES</Text>
-          <FlatList
-            data={MOCK_DISCOVERIES}
-            keyExtractor={(item) => item.id}
-            renderItem={renderPokemonItem}
-            style={styles.listContainer}
-            showsVerticalScrollIndicator={false}
-          />
+
+          {loading ? (
+            <ActivityIndicator size="small" color="#333" style={{marginTop: 20}} />
+          ) : (
+            <FlatList
+              data={recentDiscoveries}
+              keyExtractor={(item) => item.name}
+              renderItem={renderPokemonItem}
+              style={styles.listContainer}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
         </View>
       </View>
 
