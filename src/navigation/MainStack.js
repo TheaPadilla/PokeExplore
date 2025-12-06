@@ -1,35 +1,18 @@
 // File: src/navigation/MainStack.js
-// REPLACE YOUR ENTIRE FILE WITH THIS - Adds 5 bottom tabs
 
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
 
 // Import your existing screens
-import HomeScreen from '../screen/HomeScreen';
-import DetailScreen from '../screen/DetailScreen';
+import HomeScreen from '../screen/HomeScreen'; // Acting as Pokedex Tab
+import DetailScreen from '../screen/DetailScreen'; // Likely used inside a stack, not a direct tab
 import ProfileScreen from '../screen/ProfileScreen';
 
 // Import new screens (Requirements 3-5)
 import HuntScreen from '../screen/HuntScreen';
 import CaptureScreen from '../screen/CaptureScreen';
-
-// Create a placeholder Feed screen (you can create this later)
-const FeedScreen = () => (
-  <View
-    style={{
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: '#065f46',
-    }}
-  >
-    <Text style={{ color: '#fbbf24', fontSize: 18, fontWeight: 'bold' }}>
-      📱 Feed
-    </Text>
-    <Text style={{ color: '#9ca3af', marginTop: 10 }}>Coming soon...</Text>
-  </View>
-);
+import FeedScreen from '../screen/FeedScreen'; // <--- NOW USING THE REAL SCREEN
 
 const Tab = createBottomTabNavigator();
 
@@ -38,8 +21,8 @@ const TabIcon = ({ label, focused }) => {
   const iconMap = {
     Hunt: '🎯',
     Pokedex: '📚',
-    AR: '🎨',
-    Feed: '📱',
+    AR: '📷', // Changed to Camera emoji to match Capture context
+    Feed: '🌍', // Changed to Globe to match "Global Feed" context
     Profile: '👤',
   };
 
@@ -48,7 +31,7 @@ const TabIcon = ({ label, focused }) => {
       <Text
         style={[styles.tabIcon, { color: focused ? '#fbbf24' : '#9ca3af' }]}
       >
-        {iconMap[label]}
+        {iconMap[label] || '❓'}
       </Text>
       <Text
         style={[styles.tabLabel, { color: focused ? '#fbbf24' : '#9ca3af' }]}
@@ -63,6 +46,7 @@ const TabIcon = ({ label, focused }) => {
 export default function MainStack() {
   return (
     <Tab.Navigator
+      initialRouteName="Hunt" // Sets Hunt as the default start screen
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused }) => (
           <TabIcon label={route.name} focused={focused} />
@@ -71,54 +55,48 @@ export default function MainStack() {
         tabBarInactiveTintColor: '#9ca3af',
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
+        tabBarShowLabel: false, // Hides default text to use our custom one
         animationEnabled: true,
       })}
     >
-      {/* Tab 1: Hunt */}
+      {/* Tab 1: Hunt (Map/Geolocation) */}
       <Tab.Screen
         name="Hunt"
         component={HuntScreen}
-        options={{
-          title: 'Hunt',
-        }}
+        options={{ title: 'Hunt' }}
       />
 
-      {/* Tab 2: Pokedex (your existing HomeScreen) */}
+      {/* Tab 2: Pokedex (List of Pokemon) */}
+      {/* Note: We map HomeScreen here, as it contains your Pokedex list */}
       <Tab.Screen
         name="Pokedex"
         component={HomeScreen}
-        options={{
-          title: 'Pokedex',
-        }}
+        options={{ title: 'Pokedex' }}
       />
 
-      {/* Tab 3: AR (CaptureScreen with AR features) */}
+      {/* Tab 3: AR (Camera/Capture) */}
       <Tab.Screen
         name="AR"
         component={CaptureScreen}
         options={{
           title: 'AR',
+          // Optional: Hide tab bar when in Camera mode for full immersion
+          // tabBarStyle: { display: 'none' }
         }}
       />
 
-      {/* Tab 4: Feed (placeholder for now) */}
+      {/* Tab 4: Feed (Community Social) */}
       <Tab.Screen
         name="Feed"
         component={FeedScreen}
-        options={{
-          title: 'Feed',
-        }}
+        options={{ title: 'Feed' }}
       />
 
-      {/* Tab 5: Profile */}
+      {/* Tab 5: Profile (User Stats & Gallery) */}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{
-          title: 'Profile',
-        }}
+        options={{ title: 'Profile' }}
       />
     </Tab.Navigator>
   );
@@ -126,22 +104,17 @@ export default function MainStack() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#111827',
-    borderTopColor: '#fbbf24',
-    borderTopWidth: 3,
-    height: 70,
-    paddingBottom: 8,
-    paddingTop: 8,
-  },
-  tabBarItem: {
-    flex: 1,
-  },
-  tabBarLabel: {
-    fontSize: 1, // Hide default label
+    backgroundColor: '#111827', // Dark Grey/Navy
+    borderTopColor: '#fbbf24', // Gold Accent
+    borderTopWidth: 2,
+    height: 70, // Taller bar for better touch targets
+    paddingBottom: 10,
+    paddingTop: 10,
   },
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    width: 60,
   },
   tabIcon: {
     fontSize: 24,
