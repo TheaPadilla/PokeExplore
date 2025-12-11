@@ -1,41 +1,66 @@
-// File: src/navigation/MainStack.js
-
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack'; // ⭐ Import Stack
 import { View, Text, StyleSheet } from 'react-native';
 
-// Import your existing screens
-import HomeScreen from '../screen/HomeScreen'; // Acting as Pokedex Tab
-import DetailScreen from '../screen/DetailScreen'; // Likely used inside a stack, not a direct tab
+// Import Screens
+import HomeScreen from '../screen/HomeScreen';
+import DetailScreen from '../screen/DetailScreen';
 import ProfileScreen from '../screen/ProfileScreen';
-
-// Import new screens (Requirements 3-5)
 import HuntScreen from '../screen/HuntScreen';
-import CaptureScreen from '../screen/CaptureScreen';
-import FeedScreen from '../screen/FeedScreen'; // <--- NOW USING THE REAL SCREEN
+import FeedScreen from '../screen/FeedScreen';
+import EncounterScreen from '../screen/EncounterScreen'; // ⭐ New Screen
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
-// Custom Tab Bar Icon Component
+// --- STACK 1: HUNT TAB (Map -> Encounter) ---
+function HuntStackNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="HuntMap" component={HuntScreen} />
+      <Stack.Screen name="Encounter" component={EncounterScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// --- STACK 2: PROFILE TAB (Profile -> Detail) ---
+function ProfileStackNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
+      <Stack.Screen name="Detail" component={DetailScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// --- STACK 3: POKEDEX TAB (List -> Detail) ---
+// Optional: If you want clicking a Pokemon in the main list to open details too
+function PokedexStackNavigator() {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="PokedexList" component={HomeScreen} />
+        <Stack.Screen name="Detail" component={DetailScreen} />
+      </Stack.Navigator>
+    );
+}
+
+// Custom Tab Bar Icon Component (Kept your exact design)
 const TabIcon = ({ label, focused }) => {
   const iconMap = {
     Hunt: '🎯',
     Pokedex: '📚',
-    AR: '📷', // Changed to Camera emoji to match Capture context
-    Feed: '🌍', // Changed to Globe to match "Global Feed" context
+    AR: '📷',
+    Feed: '🌍',
     Profile: '👤',
   };
 
   return (
     <View style={styles.tabIconContainer}>
-      <Text
-        style={[styles.tabIcon, { color: focused ? '#fbbf24' : '#9ca3af' }]}
-      >
+      <Text style={[styles.tabIcon, { color: focused ? '#fbbf24' : '#9ca3af' }]}>
         {iconMap[label] || '❓'}
       </Text>
-      <Text
-        style={[styles.tabLabel, { color: focused ? '#fbbf24' : '#9ca3af' }]}
-      >
+      <Text style={[styles.tabLabel, { color: focused ? '#fbbf24' : '#9ca3af' }]}>
         {label}
       </Text>
     </View>
@@ -46,7 +71,7 @@ const TabIcon = ({ label, focused }) => {
 export default function MainStack() {
   return (
     <Tab.Navigator
-      initialRouteName="Hunt" // Sets Hunt as the default start screen
+      initialRouteName="Hunt"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused }) => (
           <TabIcon label={route.name} focused={focused} />
@@ -55,48 +80,32 @@ export default function MainStack() {
         tabBarInactiveTintColor: '#9ca3af',
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false, // Hides default text to use our custom one
+        tabBarShowLabel: false,
         animationEnabled: true,
       })}
     >
-      {/* Tab 1: Hunt (Map/Geolocation) */}
+      {/* Tab 1: Hunt (Now uses the Stack, so it knows about 'Encounter') */}
       <Tab.Screen
         name="Hunt"
-        component={HuntScreen}
-        options={{ title: 'Hunt' }}
+        component={HuntStackNavigator} // ⭐ Changed from HuntScreen
       />
 
-      {/* Tab 2: Pokedex (List of Pokemon) */}
-      {/* Note: We map HomeScreen here, as it contains your Pokedex list */}
+      {/* Tab 2: Pokedex */}
       <Tab.Screen
         name="Pokedex"
-        component={HomeScreen}
-        options={{ title: 'Pokedex' }}
+        component={PokedexStackNavigator} // ⭐ Changed to Stack so items are clickable
       />
 
-      {/* Tab 3: AR (Camera/Capture) */}
-      <Tab.Screen
-        name="AR"
-        component={CaptureScreen}
-        options={{
-          title: 'AR',
-          // Optional: Hide tab bar when in Camera mode for full immersion
-          // tabBarStyle: { display: 'none' }
-        }}
-      />
-
-      {/* Tab 4: Feed (Community Social) */}
+      {/* Tab 4: Feed */}
       <Tab.Screen
         name="Feed"
         component={FeedScreen}
-        options={{ title: 'Feed' }}
       />
 
-      {/* Tab 5: Profile (User Stats & Gallery) */}
+      {/* Tab 5: Profile (Now uses Stack, so it knows about 'Detail') */}
       <Tab.Screen
         name="Profile"
-        component={ProfileScreen}
-        options={{ title: 'Profile' }}
+        component={ProfileStackNavigator} // ⭐ Changed from ProfileScreen
       />
     </Tab.Navigator>
   );
@@ -104,10 +113,10 @@ export default function MainStack() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#111827', // Dark Grey/Navy
-    borderTopColor: '#fbbf24', // Gold Accent
+    backgroundColor: '#111827',
+    borderTopColor: '#fbbf24',
     borderTopWidth: 2,
-    height: 70, // Taller bar for better touch targets
+    height: 70,
     paddingBottom: 10,
     paddingTop: 10,
   },

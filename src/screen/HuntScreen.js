@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,295 +8,801 @@ import {
   FlatList,
   ActivityIndicator,
   Platform,
+  StatusBar,
+  Animated,
+  Easing,
+  Dimensions,
+  Image,
+  Modal
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import PushNotification from 'react-native-push-notification'; // 1. Import PushNotification
+
+import { fetchPokemonList, fetchPokemonDetails } from '../api/pokeapi';
+
+const CAPTURE_RADIUS_METERS = 40;
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+const darkMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#212121" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
+  { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#757575" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#2c2c2c" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3c3c3c" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#000000" }] },
+];
+
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const getTypeEmoji = (type) => {
+  switch (type) {
+    case 'grass': return '🌿';
+    case 'water': return '💧';
+    case 'fire': return '🔥';
+    case 'bug': return '🐛';
+    case 'electric': return '⚡';
+    case 'rock': return '🪨';
+    case 'ground': return '🏜️';
+    case 'psychic': return '🔮';
+    case 'ghost': return '👻';
+    case 'dragon': return '🐉';
+    case 'poison': return '☠️';
+    case 'flying': return '🦅';
+    case 'ice': return '❄️';
+    case 'fighting': return '🥊';
+    case 'normal': return '🐾';
+    default: return '❓';
+  }
+};
 
 const HuntScreen = ({ navigation }) => {
   const [location, setLocation] = useState(null);
   const [nearbyPokemon, setNearbyPokemon] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [biomeType, setBiomeType] = useState('');
-  // State to hold the watch ID for cleanup
+  const [biomeType, setBiomeType] = useState('SCANNING...');
   const [locationWatcherId, setLocationWatcherId] = useState(null);
+  const [allPokemon, setAllPokemon] = useState([]);
+
+  // Custom Modal States
+  const [modalVisible, setModalVisible] = useState(false);
+  const [targetPokemon, setTargetPokemon] = useState(null);
+  const [targetDistance, setTargetDistance] = useState(0);
+
+  const scannerAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // 1. Request permission when component mounts
-    requestLocationPermission();
+    // 2. Configure Notification Channel (Required for Android)
+    PushNotification.createChannel(
+      {
+        channelId: "pokedex-alerts",
+        channelName: "Pokemon Alerts",
+        channelDescription: "Notifications for nearby Pokemon",
+        playSound: true,
+        soundName: "default",
+        importance: 4, // High importance
+        vibrate: true,
+      },
+      (created) => console.log(`Notification Channel created: '${created}'`)
+    );
 
-    // 2. Cleanup function: Clear the watcher when the component unmounts
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scannerAnim, {
+          toValue: 1,
+          duration: 3000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scannerAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        })
+      ])
+    ).start();
+
+    let isMounted = true;
+
+    const loadGen1 = async () => {
+        const list = await fetchPokemonList();
+        if (isMounted) setAllPokemon(list);
+    };
+    loadGen1();
+
+    const initPermission = async () => {
+      try {
+        const permission = Platform.OS === 'ios'
+            ? PERMISSIONS.IOS.LOCATION_WHEN_IN_USE
+            : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;
+
+        const result = await request(permission);
+
+        if (isMounted) {
+          if (result === RESULTS.GRANTED) {
+            watchLocation();
+          } else {
+            console.log('Location permission denied by user.');
+            setLoading(false);
+          }
+        }
+      } catch (error) {
+        console.error('Permission error:', error);
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initPermission();
+
     return () => {
+      isMounted = false;
       if (locationWatcherId !== null) {
         Geolocation.clearWatch(locationWatcherId);
       }
     };
-  }, [locationWatcherId]); // Depend on locationWatcherId to set up cleanup correctly
+  }, []);
 
-  // Request location permission
-  const requestLocationPermission = async () => {
-    try {
-      const permission =
-        Platform.OS === 'ios'
-          ? PERMISSIONS.IOS.LOCATION_WHEN_IN_USE
-          : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;
-
-      const result = await request(permission);
-      if (result === RESULTS.GRANTED) {
-        // Start watching location immediately after permission is granted
-        watchLocation();
-      } else {
-        Alert.alert('Permission Denied', 'Enable location to use Hunt Mode');
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('Permission error:', error);
-      setLoading(false);
-    }
-  };
-
-  // 🔄 Watch current GPS location for real-time updates
   const watchLocation = () => {
-    setLoading(true);
-
-    // Clear any existing watch to prevent duplicates
-    if (locationWatcherId !== null) {
-        Geolocation.clearWatch(locationWatcherId);
-    }
+    if (locationWatcherId !== null) Geolocation.clearWatch(locationWatcherId);
 
     const watchId = Geolocation.watchPosition(
       position => {
         const { latitude, longitude } = position.coords;
-
-        // Only spawn new Pokemon if the location has changed significantly (e.g., 50m change)
-        if (!location || Math.abs(location.latitude - latitude) > 0.0005 || Math.abs(location.longitude - longitude) > 0.0005) {
+        if (!location) {
              setLocation({ latitude, longitude });
-             // Re-spawn/check for Pokemon when location updates
              spawnPokemon(latitude, longitude);
+        } else {
+            setLocation({ latitude, longitude });
         }
         setLoading(false);
       },
       error => {
-        console.error('Location watch error:', error);
+        console.log('Location watch error:', error);
         setLoading(false);
       },
       {
         enableHighAccuracy: true,
         timeout: 20000,
         maximumAge: 1000,
-        distanceFilter: 10 // Update every 10 meters
+        distanceFilter: 5
       },
     );
-
-    setLocationWatcherId(watchId); // Save the watch ID for cleanup
+    setLocationWatcherId(watchId);
   };
 
-  // Spawn Pokémon based on deterministic biome logic
-  const spawnPokemon = (lat, lon) => {
-    const biomes = {
-      water: {
-        type: 'WATER',
-        pokemon: [
-          { id: '007', name: 'SQUIRTLE', emoji: '💧', type: 'WATER' },
-          { id: '054', name: 'PSYDUCK', emoji: '🦆', type: 'WATER' },
-          { id: '129', name: 'MAGIKARP', emoji: '🐠', type: 'WATER' },
-        ],
-      },
-      grass: {
-        type: 'GRASS',
-        pokemon: [
-          { id: '001', name: 'BULBASAUR', emoji: '🌿', type: 'GRASS' },
-          { id: '069', name: 'BELLSPROUT', emoji: '🌱', type: 'GRASS' },
-          { id: '191', name: 'SUNKERN', emoji: '🌻', type: 'GRASS' },
-        ],
-      },
-      urban: {
-        type: 'URBAN',
-        pokemon: [
-          { id: '016', name: 'PIDGEOT', emoji: '🦅', type: 'NORMAL' },
-          { id: '025', name: 'PIKACHU', emoji: '⚡', type: 'ELECTRIC' },
-          { id: '058', name: 'GROWLITHE', emoji: '🐕', type: 'FIRE' },
-        ],
-      },
-    };
+  const spawnPokemon = async (lat, lon) => {
+    const latInt = Math.floor(lat * 1000);
+    let zoneName = 'URBAN';
+    if ((latInt % 3) === 0) zoneName = 'WATER';
+    else if ((latInt % 3) === 1) zoneName = 'GRASS';
+    setBiomeType(zoneName);
 
-    // --- Deterministic Biome Logic based on Coordinates ---
-    let determinedBiomeKey;
-    // Uses the integer part of scaled latitude to create zones
-    const latInt = Math.floor(lat * 100);
-
-    if ((latInt % 3) === 0) {
-        determinedBiomeKey = 'water';
-    } else if ((latInt % 3) === 1) {
-        determinedBiomeKey = 'grass';
-    } else {
-        determinedBiomeKey = 'urban';
+    let pool = allPokemon;
+    if (pool.length === 0) {
+        pool = await fetchPokemonList();
+        setAllPokemon(pool);
     }
-    // --- End of Biome Logic ---
 
-    const selectedBiome = biomes[determinedBiomeKey];
-    setBiomeType(determinedBiomeKey.toUpperCase());
+    if (pool.length === 0) return;
 
-    const pokemonList = selectedBiome.pokemon;
-    const spawned = pokemonList
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3)
-      .map(poke => ({
-        ...poke,
-        distance: Math.floor(Math.random() * 500) + 100, // 100-600m
-        // Position the Pokemon in a tight radius around the current location
-        latitude: lat + (Math.random() - 0.5) * 0.003,
-        longitude: lon + (Math.random() - 0.5) * 0.003,
-      }));
+    const randomPicks = [];
+    for (let i = 0; i < 3; i++) {
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        randomPicks.push(pool[randomIndex]);
+    }
 
-    setNearbyPokemon(spawned);
+    const enrichedSpawns = await Promise.all(randomPicks.map(async (p) => {
+        const details = await fetchPokemonDetails(p.id);
+        const mainType = details && details.types ? details.types[0] : 'normal';
+
+        return {
+            ...p,
+            type: mainType,
+            emoji: getTypeEmoji(mainType),
+            distance: Math.floor(Math.random() * 150) + 50,
+            latitude: lat + (Math.random() - 0.5) * 0.002,
+            longitude: lon + (Math.random() - 0.5) * 0.002,
+        };
+    }));
+
+    setNearbyPokemon(enrichedSpawns);
+
+    // 3. Trigger Local Notification only if within range
+    const catchableSpawns = enrichedSpawns.filter(p => {
+        const dist = getDistance(lat, lon, p.latitude, p.longitude);
+        return dist < CAPTURE_RADIUS_METERS;
+    });
+
+    if (catchableSpawns.length > 0) {
+      PushNotification.localNotification({
+        channelId: "pokedex-alerts", // Must match channel created in useEffect
+        title: "⚠️ Proximity Alert!",
+        message: `${catchableSpawns.length} Pokémon within capture range!`,
+        playSound: true,
+        soundName: "default",
+      });
+    }
   };
 
-  // Handle Pokémon encounter
   const handleEncounter = pokemon => {
-    Alert.alert(
-      `🎯 Wild ${pokemon.name}!`,
-      `A ${pokemon.type}-type Pokémon appeared!\nDistance: ${pokemon.distance}m`,
-      [
-        {
-          text: 'Catch!',
-          onPress: () => {
-            Alert.alert('✅ Success!', `You caught ${pokemon.name}!`, [{ text: 'OK' }]);
-          },
-        },
-        {
-          text: 'Take Photo',
-          onPress: () => {
-            Alert.alert('📸', 'Navigating to camera...');
-            navigation.navigate('Capture');
-          },
-        },
-        { text: 'Run Away', style: 'cancel' },
-      ],
+    if (!location) return;
+
+    const distance = getDistance(
+        location.latitude,
+        location.longitude,
+        pokemon.latitude,
+        pokemon.longitude
     );
+
+    if (distance > CAPTURE_RADIUS_METERS) {
+        Alert.alert(
+            "Target Out of Range",
+            `Signal weak. Target is ${Math.round(distance)}m away.\n\nMove closer to engage. (Req: ${CAPTURE_RADIUS_METERS}m)`
+        );
+        return;
+    }
+
+    // Use Custom Modal instead of Alert
+    setTargetPokemon(pokemon);
+    setTargetDistance(Math.round(distance));
+    setModalVisible(true);
   };
 
-  // Refresh location and spawn new Pokémon
+  const handleStartCapture = () => {
+    setModalVisible(false);
+    navigation.navigate('Encounter', { pokemon: targetPokemon });
+  };
+
   const handleRefresh = () => {
     if (location) {
         setLoading(true);
-        // Re-spawn based on current location
         spawnPokemon(location.latitude, location.longitude);
-        setTimeout(() => setLoading(false), 500); // Simulate loading time
-    } else {
-        // If location is null, try to restart the watching process
-        watchLocation();
+        setTimeout(() => setLoading(false), 1000);
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#fbbf24" />
-        <Text style={styles.loadingText}>Scanning for Pokémon...</Text>
-      </View>
-    );
-  }
+  const scannerTranslateY = scannerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 400],
+  });
 
   return (
     <View style={styles.container}>
-      {location ? (
-        <MapView
-          style={styles.map}
-          // Use 'region' to keep the map centered on the current location as it updates
-          region={{
-            latitude: location.latitude,
-            longitude: location.longitude,
-            latitudeDelta: 0.005, // Closer zoom level
-            longitudeDelta: 0.005,
-          }}
-          showsUserLocation={true} // Use built-in user location marker
-        >
-          {nearbyPokemon.map(poke => (
-            <Marker
-              key={poke.id}
-              coordinate={{ latitude: poke.latitude, longitude: poke.longitude }}
-              title={`🎯 ${poke.name}`}
-              description={`${poke.type} • ${poke.distance}m away`}
-              pinColor="red"
-            />
-          ))}
-        </MapView>
-      ) : (
-        <View style={styles.mapPlaceholder}>
-          <Text style={styles.errorText}>Location unavailable</Text>
-          <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh}>
-            <Text style={styles.refreshText}>🔄 RETRY LOCATION</Text>
-          </TouchableOpacity>
+      <StatusBar barStyle="light-content" backgroundColor="#DC0A2D" />
+
+      {/* 1. 3D HEADER */}
+      <View style={styles.header}>
+        <View style={styles.blueLightContainer}>
+          <View style={styles.blueLight} />
+          <View style={styles.blueLightReflection} />
         </View>
-      )}
-
-      <View style={styles.listContainer}>
-        <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>🎯 NEARBY POKÉMON</Text>
-          <Text style={styles.biomeLabel}>{biomeType}</Text>
+        <View style={styles.statusLights}>
+          <View style={[styles.smallLight, { backgroundColor: '#FF0000' }]} />
+          <View style={[styles.smallLight, { backgroundColor: '#F1C40F' }]} />
+          <View style={[styles.smallLight, { backgroundColor: '#2ECC71' }]} />
         </View>
-
-        {nearbyPokemon.length > 0 ? (
-          <FlatList
-            data={nearbyPokemon}
-            keyExtractor={item => item.id}
-            scrollEnabled={true}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.pokemonItem}
-                onPress={() => handleEncounter(item)}
-              >
-                <View style={styles.pokemonInfo}>
-                  <Text style={styles.pokemonName}>{item.emoji} {item.name}</Text>
-                  <Text style={styles.pokemonType}>{item.type}-TYPE</Text>
-                </View>
-                <View style={styles.pokemonRight}>
-                  <Text style={styles.distance}>{item.distance}m</Text>
-                  <TouchableOpacity
-                    style={styles.encounterBtn}
-                    onPress={() => handleEncounter(item)}
-                  >
-                    <Text style={styles.btnText}>ENCOUNTER</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            )}
-          />
-        ) : (
-          <Text style={styles.noPokemonText}>No Pokémon nearby yet...</Text>
-        )}
-
-        <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh}>
-          <Text style={styles.refreshText}>🔄 RESCAN FOR POKÉMON</Text>
-        </TouchableOpacity>
       </View>
+
+      <Text style={styles.headerTitle}>POKÉ-HUNT</Text>
+
+      {/* 2. THE SCREEN UNIT */}
+      <View style={styles.screenBezel}>
+        <View style={styles.innerScreen}>
+
+          {/* MAP VIEW */}
+          {location ? (
+            <View style={{flex: 1}}>
+                <MapView
+                provider={PROVIDER_GOOGLE}
+                customMapStyle={darkMapStyle}
+                style={styles.map}
+                region={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    latitudeDelta: 0.003,
+                    longitudeDelta: 0.003,
+                }}
+                showsUserLocation={true}
+                followsUserLocation={true}
+                >
+                <Circle
+                    center={location}
+                    radius={CAPTURE_RADIUS_METERS}
+                    strokeWidth={1}
+                    strokeColor="rgba(0, 255, 0, 0.3)"
+                    fillColor="rgba(0, 255, 0, 0.05)"
+                />
+                {nearbyPokemon.map((poke, index) => (
+                    <Marker
+                    key={`${poke.id}-${index}`}
+                    coordinate={{ latitude: poke.latitude, longitude: poke.longitude }}
+                    onPress={() => handleEncounter(poke)}
+                    >
+                        <View style={styles.customMarker}>
+                            <Image source={{ uri: poke.image }} style={styles.markerImage} />
+                        </View>
+                    </Marker>
+                ))}
+                </MapView>
+
+                <Animated.View
+                    style={[
+                        styles.scannerLine,
+                        { transform: [{ translateY: scannerTranslateY }] }
+                    ]}
+                />
+
+                <View style={styles.screenGlare} />
+            </View>
+          ) : (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#333" />
+                <Text style={styles.loadingText}>ACQUIRING GPS SIGNAL...</Text>
+            </View>
+          )}
+
+          <View style={styles.biomeBadge}>
+             <Text style={styles.biomeText}>📍 {biomeType} ZONE</Text>
+          </View>
+
+        </View>
+      </View>
+
+      {/* 3. CONTROL PANEL */}
+      <View style={styles.controlsContainer}>
+
+        <View style={styles.radarPanel}>
+            <View style={styles.radarHeader}>
+                <Text style={styles.panelLabel}>RADAR SIGNALS</Text>
+                <View style={styles.blinkingDot} />
+            </View>
+
+            {nearbyPokemon.length > 0 ? (
+            <FlatList
+                horizontal
+                data={nearbyPokemon}
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                contentContainerStyle={{ paddingVertical: 5 }}
+                renderItem={({ item }) => {
+                    const dist = location ? Math.round(getDistance(location.latitude, location.longitude, item.latitude, item.longitude)) : '???';
+                    return (
+                    <TouchableOpacity style={styles.trackerCard} onPress={() => handleEncounter(item)}>
+                        <Image source={{ uri: item.image }} style={styles.trackerImage} />
+                        <Text style={styles.trackerName}>{item.name.substring(0, 8)}</Text>
+                        <View style={[styles.distBadge, dist <= CAPTURE_RADIUS_METERS ? {backgroundColor:'#4ade80'} : {backgroundColor:'#fbbf24'}]}>
+                            <Text style={styles.distText}>{dist}m</Text>
+                        </View>
+                    </TouchableOpacity>
+                    )
+                }}
+            />
+            ) : (
+                <Text style={styles.emptyText}>NO SIGNALS DETECTED</Text>
+            )}
+        </View>
+
+        <TouchableOpacity style={styles.scanButton} onPress={handleRefresh}>
+            <View style={styles.scanButtonInner}>
+                {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.scanButtonText}>RE-SCAN AREA</Text>}
+            </View>
+        </TouchableOpacity>
+
+      </View>
+
+      {/* CUSTOM ENCOUNTER MODAL */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.alertIcon}>⚠️</Text>
+              <Text style={styles.modalTitle}>SIGNAL LOCKED</Text>
+              <Text style={styles.alertIcon}>⚠️</Text>
+            </View>
+
+            <View style={styles.modalContent}>
+              <Image
+                source={{ uri: targetPokemon?.image }}
+                style={styles.modalImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.modalPokemonName}>{targetPokemon?.name.toUpperCase()}</Text>
+              <Text style={styles.modalInfoText}>
+                TYPE: {targetPokemon?.type?.toUpperCase()} | DIST: {targetDistance}m
+              </Text>
+              <Text style={styles.modalPrompt}>Engage Capture Sequence?</Text>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.cancelBtn]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.modalBtnText}>IGNORE</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.catchBtn]}
+                onPress={handleStartCapture}
+              >
+                <Text style={[styles.modalBtnText, {color: '#000'}]}>THROW BALL</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1f2937' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1f2937' },
-  map: { flex: 0.65, borderBottomWidth: 4, borderBottomColor: '#fbbf24' },
-  mapPlaceholder: { flex: 0.65, backgroundColor: '#111827', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 4, borderBottomColor: '#fbbf24' },
-  errorText: { color: '#ef4444', fontSize: 16, fontFamily: 'monospace' },
-  listContainer: { flex: 0.35, backgroundColor: '#111827', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 },
-  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  listTitle: { color: '#fbbf24', fontSize: 14, fontWeight: 'bold', fontFamily: 'monospace' },
-  biomeLabel: { color: '#65a30d', fontSize: 11, fontWeight: 'bold', backgroundColor: '#1f2937', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, fontFamily: 'monospace' },
-  pokemonItem: { backgroundColor: '#065f46', paddingVertical: 10, paddingHorizontal: 10, marginBottom: 8, borderRadius: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftWidth: 3, borderLeftColor: '#fbbf24' },
-  pokemonInfo: { flex: 1 },
-  pokemonName: { color: '#fff', fontSize: 13, fontWeight: 'bold', fontFamily: 'monospace' },
-  pokemonType: { color: '#d1d5db', fontSize: 11, marginTop: 2, fontFamily: 'monospace' },
-  pokemonRight: { alignItems: 'flex-end' },
-  distance: { color: '#fbbf24', fontSize: 12, fontWeight: 'bold', fontFamily: 'monospace' },
-  encounterBtn: { backgroundColor: '#dc2626', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4, marginTop: 4, borderWidth: 1, borderColor: '#fff' },
-  btnText: { color: '#fff', fontSize: 10, fontWeight: 'bold', fontFamily: 'monospace' },
-  noPokemonText: { color: '#9ca3af', textAlign: 'center', fontFamily: 'monospace', marginVertical: 12 },
-  refreshBtn: { backgroundColor: '#3b82f6', paddingVertical: 10, borderRadius: 6, alignItems: 'center', borderWidth: 2, borderColor: '#fff', marginTop: 8 },
-  refreshText: { color: '#fff', fontWeight: 'bold', fontFamily: 'monospace', fontSize: 12 },
-  loadingText: { color: '#fbbf24', marginTop: 12, fontFamily: 'monospace', fontSize: 14 },
+  container: {
+    flex: 1,
+    backgroundColor: '#DC0A2D',
+    paddingTop: 50,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  blueLightContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#FFF',
+    elevation: 5,
+  },
+  blueLight: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#28AAFD',
+    borderWidth: 2,
+    borderColor: '#191970',
+  },
+  blueLightReflection: {
+    position: 'absolute',
+    top: 10,
+    left: 12,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  statusLights: {
+    flexDirection: 'row',
+    marginLeft: 15,
+    gap: 8,
+  },
+  smallLight: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#000',
+    elevation: 2,
+  },
+  headerTitle: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 15,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  screenBezel: {
+    flex: 1,
+    backgroundColor: '#DEDEDE',
+    marginHorizontal: 20,
+    marginBottom: 15,
+    borderRadius: 15,
+    padding: 20,
+    borderBottomRightRadius: 45,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  innerScreen: {
+    flex: 1,
+    backgroundColor: '#000',
+    borderWidth: 4,
+    borderColor: '#555',
+    borderRadius: 5,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  scannerLine: {
+    width: '100%',
+    height: 2,
+    backgroundColor: '#00FF00',
+    shadowColor: '#00FF00',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 5,
+    opacity: 0.7,
+    position: 'absolute',
+    top: 0,
+  },
+  screenGlare: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 100,
+    height: 100,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderBottomLeftRadius: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#98CB98',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontWeight: 'bold',
+    color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  biomeBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#00FF00',
+  },
+  biomeText: {
+    color: '#00FF00',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  controlsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  radarPanel: {
+    backgroundColor: '#222',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#555',
+    height: 142.5,
+    elevation: 3,
+  },
+  radarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  panelLabel: {
+    color: '#00FF00',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  blinkingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF0000',
+  },
+  trackerCard: {
+    backgroundColor: '#333',
+    width: 80,
+    height: 95,
+    borderRadius: 6,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#555',
+    padding: 2,
+  },
+  trackerImage: {
+    width: 50,
+    height: 50,
+    marginBottom: 2,
+  },
+  trackerName: {
+    color: '#FFF',
+    fontSize: 9,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  distBadge: {
+    marginTop: 2,
+    paddingHorizontal: 4,
+    borderRadius: 3,
+  },
+  distText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  emptyText: {
+    color: '#666',
+    fontStyle: 'italic',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  scanButton: {
+    backgroundColor: '#C59E00',
+    borderRadius: 8,
+    paddingBottom: 4,
+  },
+  scanButtonInner: {
+    backgroundColor: '#FFCB05',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#C59E00',
+  },
+  scanButtonText: {
+    color: '#000',
+    fontWeight: '900',
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 1,
+  },
+  customMarker: {
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    padding: 2,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#00FF00',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerImage: {
+    width: 35,
+    height: 35,
+    resizeMode: 'contain'
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '85%',
+    backgroundColor: '#222',
+    borderWidth: 4,
+    borderColor: '#DEDEDE',
+    borderRadius: 10,
+    padding: 5,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#CC0000',
+    padding: 10,
+    alignItems: 'center',
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+  },
+  modalTitle: {
+    color: '#FFF',
+    fontWeight: '900',
+    fontSize: 18,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 2,
+  },
+  alertIcon: {
+    fontSize: 20,
+    color: '#FFF',
+  },
+  modalContent: {
+    backgroundColor: '#98CB98',
+    borderWidth: 3,
+    borderColor: '#555',
+    margin: 10,
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 5,
+  },
+  modalImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 10,
+  },
+  modalPokemonName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#000',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: 5,
+  },
+  modalInfoText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: 20,
+  },
+  modalPrompt: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#000',
+    fontStyle: 'italic',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingBottom: 15,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 5,
+    alignItems: 'center',
+    borderWidth: 2,
+    marginHorizontal: 5,
+    elevation: 3,
+  },
+  cancelBtn: {
+    backgroundColor: '#555',
+    borderColor: '#333',
+  },
+  catchBtn: {
+    backgroundColor: '#FFCB05',
+    borderColor: '#C59E00',
+  },
+  modalBtnText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 14,
+  },
 });
 
 export default HuntScreen;

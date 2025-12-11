@@ -1,5 +1,6 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { setLogLevel } from 'firebase/firestore';
 
@@ -22,18 +23,20 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // 2. Initialize Auth (Hot Reload safe)
 let auth;
 try {
-  // Try to initialize Auth with React Native persistence
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(ReactNativeAsyncStorage)
   });
 } catch (error) {
-  // If "auth/already-initialized" occurs (during Hot Reload), just get the existing instance
+  // If app is already initialized, use getAuth
   if (error.code === 'auth/already-initialized') {
     auth = getAuth(app);
   } else {
-    console.error("Firebase Auth Init Error:", error);
     throw error;
   }
 }
 
-export { auth };
+// 3. Initialize Firestore Database
+const db = getFirestore(app);
+
+// 4. Export both auth AND db
+export { auth, db };
